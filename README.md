@@ -1,6 +1,6 @@
-# FlowPrint – MindPal Workflow Blueprint Builder (Chrome extension)
+# FlowPrint – multi-agent AI workflows in your browser (Chrome extension)
 
-Turn a plain-language description of a repeatable task into a complete MindPal multi-agent workflow blueprint: agent chain, per-agent system prompts, input form fields, knowledge-source checklist, publishing checklist and public form copy. Export as PDF, TXT or JSON.
+A MindPal-style workflow tool in Chrome's side panel. Describe a repeatable task and AI builds the agent chain (agents, system prompts, input form). Then **run it right inside FlowPrint** with your own inputs and API key: each agent runs in order, passing its output to the next. Workflows and their run history are saved in **My workflows**. Blueprints can still be exported (PDF/TXT/JSON) to rebuild in MindPal.
 
 ## Install (unpacked, for testing)
 1. Download/unzip this folder.
@@ -14,10 +14,13 @@ Turn a plain-language description of a repeatable task into a complete MindPal m
 | 1 Setup | Provider + key test, live model list | Create API key, have a MindPal account |
 | 2 Task | Presets, niche/output detection, blueprint generation | Write a specific task description |
 | 3 Agents | Agent chain + system prompts, copy & "Improve with AI" | Create agents/nodes in MindPal, paste prompts |
-| 4 Form | Field table + copyable list | Add the fields to the workflow input form |
+| 4 Run | Input form, reference material, runs the agent chain, per-agent output, re-run from any agent, run history, Markdown download | Fill in your inputs |
 | 5 Knowledge | Document checklist | Gather and upload files to MindPal |
 | 6 Publish | Form title/description/instructions | Test, publish, share link (tickable checklist) |
 | 7 Export | PDF / TXT / JSON / clipboard | — |
+
+## My workflows (☰)
+Every generated workflow is saved automatically. Run, edit, duplicate, export or delete it from the ☰ button. Each workflow keeps its last 20 runs.
 
 ## BYOK – supported providers
 - **Anthropic** (Messages API, browser-direct header)

@@ -3,7 +3,8 @@ import { PROVIDERS, listModels, testKey, complete } from "./providers.js";
 import { REWRITE_AGENT_PROMPT } from "./prompts.js";
 import {
   parseTaskInput, selectPreset, buildAgentChainPrompt, parseBlueprint, validateBlueprint,
-  buildPublishingSteps, formCopyText, fieldsText, buildExportText, extractJson
+  buildPublishingSteps, formCopyText, fieldsText, buildExportText, extractJson,
+  buildAgentRunMessages, buildRunMarkdown
 } from "./engine.js";
 import { exportPdf, exportTxt, exportJson, downloadBlob } from "./exporter.js";
 import { local, loadSettings, saveSettings, loadKeys, saveKeys } from "./storage.js";
@@ -12,7 +13,8 @@ const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const STEPS = ["setup", "task", "agents", "fields", "knowledge", "publish", "export"];
+const STEPS = ["setup", "task", "agents", "run", "knowledge", "publish", "export"];
+const OVERLAYS = ["settings", "library"];
 const LOADING_MSGS = ["Mapping your agent chain…", "Writing agent prompts…", "Building your form field list…", "Preparing your knowledge checklist…", "Finalizing your blueprint…"];
 
 const state = {
@@ -40,7 +42,21 @@ async function copy(text, label = "Copied") {
 }
 const currentModel = () => $("#customModel").value.trim() || $("#model").value;
 const persistDraft = () => local.set("draft", state.draft);
-const persistBlueprint = () => local.set("blueprint", state.blueprint);
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+const loadLibrary = async () => (await local.get("library")) || [];
+
+// Saves the current workflow and keeps the "My workflows" library in sync.
+async function persistBlueprint() {
+  const bp = state.blueprint;
+  if (!bp) return;
+  bp.id ||= uid();
+  bp.updatedAt = Date.now();
+  await local.set("blueprint", bp);
+  const lib = await loadLibrary();
+  const i = lib.findIndex(x => x.id === bp.id);
+  if (i >= 0) lib[i] = bp; else lib.unshift(bp);
+  await local.set("library", lib);
+}
 
 // ---------------- Tooltips ----------------
 function initTooltips() {
@@ -68,12 +84,12 @@ function initTooltips() {
 
 // ---------------- Navigation ----------------
 function canEnter(step) {
-  if (step === "setup" || step === "task" || step === "settings") return true;
+  if (step === "setup" || step === "task" || OVERLAYS.includes(step)) return true;
   return !!state.blueprint;
 }
 function go(step) {
   if (!canEnter(step)) return;
-  if (step === "settings" && state.step !== "settings") state.prevStep = state.step;
+  if (OVERLAYS.includes(step) && !OVERLAYS.includes(state.step)) state.prevStep = state.step;
   state.step = step;
   $$(".step").forEach(s => s.classList.toggle("active", s.dataset.step === step));
   const idx = STEPS.indexOf(step);
@@ -93,7 +109,7 @@ function go(step) {
     $("#btnNext").textContent = next ? "Next →" : "Done";
   }
   $("#main").scrollTop = 0;
-  if (step !== "settings") local.set("step", step);
+  if (!OVERLAYS.includes(step)) local.set("step", step);
 }
 
 // ---------------- Step 1: Setup ----------------
@@ -240,6 +256,9 @@ async function generate() {
     }
     bp.meta = { niche: state.draft.niche, outputTypes: outputs, tone: state.draft.tone, provider: p, model: currentModel(), createdAt: new Date().toISOString() };
     bp.checks = { knowledge: [], publish: [] };
+    bp.id = uid();
+    bp.inputs = {};
+    bp.runs = [];
     state.blueprint = bp;
     await persistBlueprint();
     renderBlueprint();
@@ -313,6 +332,7 @@ function renderBlueprint() {
   renderChecklist("#knowledgeList", "knowledge", bp.knowledgeSources.map(k => ({ text: k.documentType, sub: `${k.whatItShouldContain} — <i>${k.whyItMatters}</i>` })));
   renderChecklist("#publishList", "publish", buildPublishingSteps(bp).map(s => ({ text: s.text, sub: esc(s.sub) })), true);
   $("#formCopy").textContent = formCopyText(bp);
+  renderRun();
 }
 
 function renderChecklist(sel, key, items, subIsEscaped = false) {
@@ -342,6 +362,192 @@ async function improveAgent(i, btn) {
     toast(`Couldn't improve: ${e.message}`, true);
     btn.disabled = false; btn.textContent = "✨ Improve with AI";
   }
+}
+
+// ---------------- Step 4: Run ----------------
+const slugify = s => (s || "workflow").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+
+// Light Markdown: headings and bold, everything else kept as pre-wrapped text.
+const md = s => esc(s)
+  .replace(/^#{1,4}\s+(.*)$/gm, '<span class="h">$1</span>')
+  .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+
+function renderRun() {
+  if (!state.blueprint) return;
+  renderRunForm();
+  $("#refText").value = state.blueprint.reference || "";
+  updateRefCount();
+  renderRunResults();
+}
+
+function renderRunForm() {
+  const bp = state.blueprint;
+  const vals = bp.inputs || {};
+  $("#runForm").innerHTML = bp.formFields.map((f, i) => {
+    const id = `rf-${i}`;
+    const v = esc(vals[f.fieldName] ?? "");
+    const ph = esc(f.exampleValue ? `e.g. ${f.exampleValue}` : "");
+    const attrs = `id="${id}" data-field="${esc(f.fieldName)}"`;
+    let control;
+    if (f.fieldType === "dropdown" && Array.isArray(f.options) && f.options.length) {
+      control = `<select ${attrs}><option value="">Choose…</option>${f.options.map(o => `<option ${o === vals[f.fieldName] ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+    } else if (f.fieldType === "textarea") {
+      control = `<textarea ${attrs} rows="3" placeholder="${ph}">${v}</textarea>`;
+    } else {
+      control = `<input ${attrs} type="${f.fieldType === "number" ? "number" : "text"}" value="${v}" placeholder="${ph}" />`;
+    }
+    return `<label for="${id}">${esc(f.fieldName)}${f.required !== false ? ' <span class="req">*</span>' : ""}</label>${control}<div class="field-help">${esc(f.description)}</div>`;
+  }).join("") || `<p class="muted">This workflow has no input fields.</p>`;
+}
+
+const readRunForm = () => Object.fromEntries($$("#runForm [data-field]").map(el => [el.dataset.field, el.value.trim()]));
+
+function updateRefCount() {
+  const n = ($("#refText").value || "").length;
+  $("#refCount").textContent = n ? `${n.toLocaleString()} characters` : "";
+}
+
+const shownRun = () => state.currentRun
+  || (state.viewRunId && state.blueprint?.runs?.find(r => r.id === state.viewRunId))
+  || state.blueprint?.runs?.[0] || null;
+
+function renderRunResults() {
+  const bp = state.blueprint;
+  const run = shownRun();
+  const live = !!state.currentRun;
+  const label = { waiting: "Waiting", running: "Running…", done: "✓ Done", error: "✗ Error", stopped: "Stopped" };
+  $("#runResults").innerHTML = run ? run.outputs.map((o, i) => `
+    ${i ? '<div class="arrow">↓</div>' : ""}
+    <div class="card agent-card result-card">
+      <h4><span class="agent-num">${i + 1}</span>${esc(bp.agents[i]?.agentName || o.agentName)}
+        <span class="status-dot ${o.status}">${o.status === "running" ? '<span class="mini-spinner"></span>' : ""}${label[o.status] || ""}</span></h4>
+      ${o.text ? `<div class="output">${md(o.text)}</div>` : ""}
+      ${o.error ? `<div class="banner error">${esc(o.error)}</div>` : ""}
+      ${!live ? `<div class="agent-actions">
+        ${o.text ? `<button class="btn ghost small" data-copy-out="${i}">Copy</button>` : ""}
+        <button class="btn ghost small" data-rerun="${i}" data-tip="Run this agent again (and the ones after it) using the same inputs">↻ Re-run from here</button>
+      </div>` : ""}
+    </div>`).join("") : "";
+  $("#runResultActions").classList.toggle("hidden", !run || live);
+  $("#btnRun").classList.toggle("hidden", live);
+  $("#btnStopRun").classList.toggle("hidden", !live);
+  $("#runForm").querySelectorAll("input,select,textarea").forEach(el => { el.disabled = live; });
+
+  const runs = bp.runs || [];
+  $("#runHistoryCount").textContent = runs.length ? `(${runs.length})` : "";
+  $("#runHistory").innerHTML = runs.length ? runs.map(r => {
+    const first = Object.values(r.inputs || {}).find(Boolean) || "";
+    const ok = r.outputs.filter(o => o.status === "done").length;
+    return `<li><span class="grow"><b>${new Date(r.startedAt).toLocaleString()}</b> · ${esc(first)} · ${ok}/${r.outputs.length} agents</span>
+      <button class="btn ghost small" data-view-run="${r.id}">View</button></li>`;
+  }).join("") : `<li class="muted">No runs yet.</li>`;
+}
+
+async function runWorkflow({ fromIndex = 0, base = null } = {}) {
+  const bp = state.blueprint;
+  const p = state.settings.provider;
+  if (!state.keys[p]) { toast("Add and test an API key in step 1", true); return; }
+  const model = currentModel();
+  if (!model) { toast("Choose a model in step 1", true); return; }
+  const values = base ? base.inputs : readRunForm();
+  if (!base) {
+    const missing = bp.formFields.filter(f => f.required !== false && !String(values[f.fieldName] || "").trim()).map(f => f.fieldName);
+    if (missing.length) { toast(`Please fill in: ${missing.join(", ")}`, true); return; }
+    bp.inputs = values;
+  }
+  const run = {
+    id: uid(), startedAt: Date.now(), provider: p, model, inputs: values,
+    outputs: bp.agents.map((a, i) => i < fromIndex && base?.outputs[i]
+      ? { ...base.outputs[i] }
+      : { agentName: a.agentName, status: "waiting" })
+  };
+  state.currentRun = run;
+  state.viewRunId = null;
+  state.runAbort = new AbortController();
+  renderRunResults();
+
+  for (let i = fromIndex; i < bp.agents.length; i++) {
+    run.outputs[i].status = "running";
+    $("#runProgress").textContent = `Agent ${i + 1} of ${bp.agents.length}: ${bp.agents[i].agentName}`;
+    renderRunResults();
+    try {
+      const { system, user } = buildAgentRunMessages(bp, i, values, run.outputs, bp.reference || "");
+      const text = await complete({
+        provider: p, key: state.keys[p], model, system, user,
+        maxTokens: state.settings.maxTokens, json: false, signal: state.runAbort.signal
+      });
+      if (!text.trim()) throw new Error("The model returned an empty answer. Try again or pick another model.");
+      run.outputs[i] = { agentName: bp.agents[i].agentName, status: "done", text };
+    } catch (e) {
+      const stopped = e.name === "AbortError";
+      run.outputs[i].status = stopped ? "stopped" : "error";
+      if (!stopped) run.outputs[i].error = e.message;
+      break;
+    }
+  }
+  run.finishedAt = Date.now();
+  bp.runs = [run, ...(bp.runs || [])].slice(0, 20);
+  state.currentRun = null;
+  state.runAbort = null;
+  $("#runProgress").textContent = "";
+  await persistBlueprint();
+  renderRunResults();
+  const ok = run.outputs.every(o => o.status === "done");
+  toast(ok ? "Workflow finished" : "Run stopped before the end", !ok);
+}
+
+// ---------------- Library (My workflows) ----------------
+async function renderLibrary() {
+  const lib = await loadLibrary();
+  $("#libraryList").innerHTML = lib.length ? lib.map(bp => `
+    <div class="card wf-card ${bp.id === state.blueprint?.id ? "current" : ""}">
+      <h4>${esc(bp.workflowTitle)}</h4>
+      <div class="meta">${bp.agents.length} agents · ${(bp.runs || []).length} runs · updated ${new Date(bp.updatedAt || Date.now()).toLocaleDateString()}</div>
+      <div class="muted small">${esc((bp.workflowDescription || "").slice(0, 160))}</div>
+      <div class="agent-actions">
+        <button class="btn primary small" data-lib="run" data-id="${bp.id}">▶ Run</button>
+        <button class="btn ghost small" data-lib="open" data-id="${bp.id}" data-tip="Open the agent chain to view or edit prompts">Edit</button>
+        <button class="btn ghost small" data-lib="dup" data-id="${bp.id}">Duplicate</button>
+        <button class="btn ghost small" data-lib="export" data-id="${bp.id}" data-tip="Download as JSON to back up or share">Export</button>
+        <button class="btn danger-ghost small" data-lib="del" data-id="${bp.id}">Delete</button>
+      </div>
+    </div>`).join("") : `<div class="empty">No workflows yet.<br/>Click <b>+ New workflow</b> to build your first one.</div>`;
+}
+
+async function libraryAction(e) {
+  const b = e.target.closest("[data-lib]");
+  if (!b) return;
+  const lib = await loadLibrary();
+  const bp = lib.find(x => x.id === b.dataset.id);
+  if (!bp) return;
+  const act = b.dataset.lib;
+  if (act === "open" || act === "run") {
+    state.blueprint = bp;
+    state.viewRunId = null;
+    await local.set("blueprint", bp);
+    renderBlueprint();
+    go(act === "run" ? "run" : "agents");
+  } else if (act === "dup") {
+    const copyBp = { ...structuredClone(bp), id: uid(), workflowTitle: `${bp.workflowTitle} (copy)`, runs: [], updatedAt: Date.now() };
+    lib.unshift(copyBp);
+    await local.set("library", lib);
+    renderLibrary(); toast("Duplicated");
+  } else if (act === "export") {
+    exportJson(bp);
+  } else if (act === "del") {
+    if (!confirm(`Delete "${bp.workflowTitle}" and its runs?`)) return;
+    await local.set("library", lib.filter(x => x.id !== bp.id));
+    if (state.blueprint?.id === bp.id) { state.blueprint = null; await local.remove("blueprint"); }
+    renderLibrary(); toast("Deleted");
+  }
+}
+
+async function newWorkflow() {
+  state.blueprint = null;
+  state.viewRunId = null;
+  state.draft = { task: "", tone: "Conversational", niche: "", outputs: [], preset: null };
+  await local.remove("blueprint"); await persistDraft();
+  renderTaskStep(); go("task");
 }
 
 // ---------------- Settings ----------------
@@ -382,6 +588,8 @@ async function onFile(e) {
       const bp = parseBlueprint(JSON.stringify(data));
       if (bp.error || !bp.agents.length) throw new Error("Not a FlowPrint blueprint");
       bp.meta = data.meta; bp.checks = data.checks || { knowledge: [], publish: [] };
+      bp.inputs = data.inputs || {}; bp.reference = data.reference || ""; bp.runs = data.runs || [];
+      bp.id = data.id && !(await loadLibrary()).some(x => x.id === data.id) ? data.id : uid();
       state.blueprint = bp;
       await persistBlueprint();
       renderBlueprint();
@@ -474,13 +682,57 @@ function wire() {
   $("#btnTxt").onclick = () => exportTxt(state.blueprint);
   $("#btnJson").onclick = () => exportJson(state.blueprint);
   $("#btnCopyAll").onclick = () => copy(buildExportText(state.blueprint), "Blueprint copied");
-  $("#btnStartOver").onclick = async () => {
-    if (!confirm("Clear this blueprint and start a new one?")) return;
-    state.blueprint = null;
-    state.draft = { task: "", tone: "Conversational", niche: "", outputs: [], preset: null };
-    await local.remove("blueprint"); await persistDraft();
-    renderTaskStep(); go("task");
+  $("#btnStartOver").onclick = () => {
+    if (confirm("Start a new workflow? This one stays saved in My workflows (☰).")) newWorkflow();
   };
+  $("#btnRunMd").onclick = () => {
+    const run = state.blueprint?.runs?.[0];
+    if (!run) return toast("Run the workflow first (step 4)", true);
+    downloadBlob(buildRunMarkdown(state.blueprint, run), `${slugify(state.blueprint.workflowTitle)}-results.md`, "text/markdown");
+  };
+
+  // Run
+  $("#runForm").addEventListener("input", () => { state.blueprint.inputs = readRunForm(); persistBlueprint(); });
+  $("#fillExamples").onclick = e => {
+    e.preventDefault();
+    state.blueprint.inputs = Object.fromEntries(state.blueprint.formFields.map(f => [f.fieldName, f.exampleValue || ""]));
+    persistBlueprint(); renderRunForm();
+  };
+  $("#refText").addEventListener("input", () => { state.blueprint.reference = $("#refText").value; updateRefCount(); persistBlueprint(); });
+  $("#btnLoadRef").onclick = () => $("#refFiles").click();
+  $("#refFiles").onchange = async e => {
+    const files = [...e.target.files];
+    e.target.value = "";
+    let add = "";
+    for (const f of files) add += `\n\n### ${f.name}\n${(await f.text()).trim()}`;
+    state.blueprint.reference = ((state.blueprint.reference || "") + add).trim();
+    $("#refText").value = state.blueprint.reference;
+    updateRefCount(); persistBlueprint();
+    toast(`${files.length} file(s) added`);
+  };
+  $("#btnRun").onclick = () => runWorkflow();
+  $("#btnStopRun").onclick = () => state.runAbort?.abort();
+  $("#runResults").addEventListener("click", e => {
+    const run = shownRun();
+    const c = e.target.closest("[data-copy-out]");
+    if (c && run) return copy(run.outputs[+c.dataset.copyOut]?.text || "", "Output copied");
+    const r = e.target.closest("[data-rerun]");
+    if (r && run) runWorkflow({ fromIndex: +r.dataset.rerun, base: run });
+  });
+  $("#btnCopyRun").onclick = () => { const run = shownRun(); if (run) copy(buildRunMarkdown(state.blueprint, run), "Results copied"); };
+  $("#btnDownloadRun").onclick = () => {
+    const run = shownRun();
+    if (run) downloadBlob(buildRunMarkdown(state.blueprint, run), `${slugify(state.blueprint.workflowTitle)}-results.md`, "text/markdown");
+  };
+  $("#runHistory").addEventListener("click", e => {
+    const v = e.target.closest("[data-view-run]");
+    if (v) { state.viewRunId = v.dataset.viewRun; renderRunResults(); $("#runResults").scrollIntoView({ behavior: "smooth" }); }
+  });
+
+  // Library
+  $("#btnLibrary").onclick = () => { renderLibrary(); go("library"); };
+  $("#btnNewWorkflow").onclick = newWorkflow;
+  $("#libraryList").addEventListener("click", libraryAction);
 
   // Settings
   $("#keyFields").addEventListener("change", async e => {
@@ -507,6 +759,7 @@ async function init() {
   state.keys = await loadKeys(state.settings.rememberKeys);
   state.draft = { ...state.draft, ...((await local.get("draft")) || {}) };
   state.blueprint = (await local.get("blueprint")) || null;
+  if (state.blueprint && !state.blueprint.id) await persistBlueprint(); // older builds: add to library
   applyTheme();
   initTooltips();
   wire();

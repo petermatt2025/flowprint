@@ -20,7 +20,9 @@ Your job is to read a task description and output a complete, structured MindPal
       "fieldName": "string",
       "fieldType": "string -- one of: text, textarea, dropdown, number",
       "description": "string -- what the end user should enter here",
-      "exampleValue": "string"
+      "exampleValue": "string",
+      "options": ["string -- 3 to 8 choices, ONLY for dropdown fields; omit otherwise"],
+      "required": true
     }
   ],
   "knowledgeSources": [

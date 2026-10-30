@@ -13,10 +13,11 @@
   <header class="topbar">
     <div class="brand">
       <span class="logo">Flow<b>Print</b></span>
-      <span class="tagline">Build your MindPal workflow blueprint in 60 seconds</span>
+      <span class="tagline">Build and run multi-agent AI workflows</span>
     </div>
     <div class="top-actions">
       <button id="btnPopout" class="icon-btn" data-tip="Open in a full browser tab for more room. Tip: you can also drag the side panel's left edge to make it wider." aria-label="Pop out">⤢</button>
+      <button id="btnLibrary" class="icon-btn" data-tip="My workflows: open, run or manage saved workflows" aria-label="Workflows">☰</button>
       <button id="btnSettings" class="icon-btn" data-tip="Settings: API keys, default models, import/export" aria-label="Settings">⚙</button>
     </div>
   </header>
@@ -25,7 +26,7 @@
     <button role="tab" data-step="setup" data-tip="Pick your AI provider and model">1 Setup</button>
     <button role="tab" data-step="task" data-tip="Describe the repeatable task you want to automate">2 Task</button>
     <button role="tab" data-step="agents" data-tip="The chain of agents and their system prompts" disabled>3 Agents</button>
-    <button role="tab" data-step="fields" data-tip="Input fields for the published MindPal form" disabled>4 Form</button>
+    <button role="tab" data-step="run" data-tip="Fill in your inputs and run the agent chain" disabled>4 Run</button>
     <button role="tab" data-step="knowledge" data-tip="Documents to upload to MindPal's knowledge base" disabled>5 Knowledge</button>
     <button role="tab" data-step="publish" data-tip="Test, publish and share your workflow" disabled>6 Publish</button>
     <button role="tab" data-step="export" data-tip="Download the whole blueprint" disabled>7 Export</button>
@@ -130,26 +131,55 @@
       </div>
       <div id="agentList"></div>
       <div class="card manual">
-        <span class="badge manual">Manual — in MindPal</span>
+        <span class="badge manual">Optional — rebuild in MindPal</span>
         <ul id="agentsManual"></ul>
       </div>
     </section>
 
-    <!-- STEP 4: FORM FIELDS -->
-    <section class="step" data-step="fields">
-      <h2>Input form fields</h2>
+    <!-- STEP 4: RUN -->
+    <section class="step" data-step="run">
+      <div class="step-head">
+        <h2>Run workflow</h2>
+        <a href="#" id="fillExamples" class="link" data-tip="Fill every field with the example values">Fill with examples</a>
+      </div>
       <div class="card">
-        <span class="badge auto">Automated</span>
+        <span class="badge auto">Your inputs</span>
+        <div id="runForm"></div>
+        <details class="ref">
+          <summary>Reference material (optional) <i class="tip" data-tip="Like MindPal knowledge: anything pasted or loaded here is given to every agent in the chain.">?</i></summary>
+          <textarea id="refText" rows="5" placeholder="Paste brand voice, notes, research, examples…"></textarea>
+          <div class="row ref-actions">
+            <button id="btnLoadRef" class="btn ghost small" data-tip="Load .txt or .md files – their text is appended above">Load .txt / .md files</button>
+            <span id="refCount" class="muted small"></span>
+            <input id="refFiles" type="file" accept=".txt,.md,.csv,.json,text/*" multiple hidden />
+          </div>
+        </details>
+        <div class="row run-actions">
+          <button id="btnRun" class="btn primary block">▶ Run workflow</button>
+          <button id="btnStopRun" class="btn danger-ghost block hidden">■ Stop</button>
+        </div>
+        <div id="runProgress" class="muted small"></div>
+      </div>
+      <div id="runResults"></div>
+      <div id="runResultActions" class="card hidden">
+        <div class="btn-stack">
+          <button id="btnCopyRun" class="btn ghost block">Copy all results</button>
+          <button id="btnDownloadRun" class="btn ghost block">Download results (.md)</button>
+        </div>
+      </div>
+      <details class="card">
+        <summary><b>Past runs</b> <span id="runHistoryCount" class="muted small"></span></summary>
+        <ul id="runHistory" class="history"></ul>
+      </details>
+      <details class="card manual">
+        <summary><span class="badge manual">Optional — build this form in MindPal</span></summary>
         <div class="table-wrap"><table id="fieldTable">
           <thead><tr><th>Field</th><th>Type</th><th>Description</th><th>Example</th></tr></thead>
           <tbody></tbody>
         </table></div>
         <button id="btnCopyFields" class="btn ghost small" data-tip="Copies the field list as text so you can recreate it in MindPal">Copy field list</button>
-      </div>
-      <div class="card manual">
-        <span class="badge manual">Manual — in MindPal</span>
         <ul id="fieldsManual"></ul>
-      </div>
+      </details>
     </section>
 
     <!-- STEP 5: KNOWLEDGE -->
@@ -160,7 +190,7 @@
         <ul id="knowledgeList" class="checklist"></ul>
       </div>
       <div class="card manual">
-        <span class="badge manual">Manual — gather &amp; upload</span>
+        <span class="badge manual">Manual — gather (paste into Run → Reference material, or upload to MindPal)</span>
         <ul>
           <li>Collect each document above (PDF, DOCX, URLs or notes all work).</li>
           <li>In MindPal open <b>Assets → Knowledge</b> and create a folder for this workflow.</li>
@@ -179,7 +209,7 @@
         <button id="btnCopyForm" class="btn ghost small">Copy block</button>
       </div>
       <div class="card manual">
-        <span class="badge manual">Manual — publishing checklist</span>
+        <span class="badge manual">Optional — publish in MindPal</span>
         <ol id="publishList" class="checklist"></ol>
       </div>
     </section>
@@ -192,6 +222,7 @@
         <div class="btn-stack">
           <button id="btnPdf" class="btn primary block" data-tip="A formatted PDF you can keep open while building in MindPal">Export as PDF</button>
           <button id="btnTxt" class="btn ghost block">Download plain text (.txt)</button>
+          <button id="btnRunMd" class="btn ghost block" data-tip="Results of the latest run, as Markdown">Download latest run results (.md)</button>
           <button id="btnJson" class="btn ghost block" data-tip="Raw blueprint data. Re-import it later from Settings → Load blueprint.">Download JSON</button>
           <button id="btnCopyAll" class="btn ghost block">Copy everything to clipboard</button>
           <button id="btnStartOver" class="btn danger-ghost block">Start over</button>
@@ -204,6 +235,15 @@
           <li>After your first test run, tweak prompts in MindPal directly.</li>
         </ul>
       </div>
+    </section>
+
+    <!-- LIBRARY -->
+    <section class="step" data-step="library">
+      <div class="step-head">
+        <h2>My workflows</h2>
+        <button id="btnNewWorkflow" class="btn primary small" data-tip="Describe a new task and let AI build the agent chain">+ New workflow</button>
+      </div>
+      <div id="libraryList"></div>
     </section>
 
     <!-- SETTINGS -->

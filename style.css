@@ -181,3 +181,35 @@ th { color: var(--text-muted); font-weight: 600; }
 
 /* Wider layout when popped out into a tab */
 body.wide main { max-width: 900px; margin: 0 auto; width: 100%; }
+
+/* Run step */
+details > summary { cursor: pointer; list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "▸ "; color: var(--text-muted); }
+details[open] > summary::before { content: "▾ "; }
+details.ref { margin-top: 12px; }
+details.ref textarea { margin-top: 8px; }
+.ref-actions { margin-top: 6px; }
+.run-actions { gap: 8px; }
+.run-actions .btn.block { margin-top: 14px; }
+.field-help { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.req { color: var(--brand-primary); }
+.result-card .status-dot { font-size: 11px; font-weight: 700; margin-left: auto; }
+.result-card .status-dot.running { color: var(--brand-primary); }
+.result-card .status-dot.done { color: var(--brand-accent); }
+.result-card .status-dot.error { color: var(--brand-danger); }
+.result-card .status-dot.waiting { color: var(--text-muted); }
+.output { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.55; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; max-height: 420px; overflow: auto; margin-top: 8px; }
+.output .h { display: block; font-weight: 700; color: var(--brand-primary); }
+.mini-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--brand-primary);
+  border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 4px; }
+.history { list-style: none; padding: 0 !important; }
+.history li { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.history li .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Library */
+.wf-card h4 { margin: 0 0 4px; font-size: 14px; }
+.wf-card .meta { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+.wf-card.current { border-color: var(--brand-primary); }
+.empty { text-align: center; color: var(--text-muted); padding: 30px 10px; }

@@ -143,3 +143,39 @@ export function buildExportText(bp) {
   out.push("", line, "FORM COPY", line, formCopyText(bp), "");
   return out.join("\n");
 }
+
+// ---------- Running a workflow locally ----------
+const norm = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+// Replace {{Field Name}} with the user's value (case/spacing-insensitive). Unknown placeholders are left as-is.
+export function fillTemplate(text, values) {
+  const map = Object.fromEntries(Object.entries(values || {}).map(([k, v]) => [norm(k), v]));
+  return String(text || "").replace(/\{\{\s*([^}]+?)\s*\}\}/g, (m, name) => {
+    const v = map[norm(name)];
+    return v !== undefined && v !== "" ? v : m;
+  });
+}
+
+export function buildAgentRunMessages(bp, i, values, outputs, reference) {
+  const agent = bp.agents[i];
+  const system = `${fillTemplate(agent.systemPrompt, values)}
+
+Return only the finished deliverable for your step, formatted in clean Markdown. Do not ask the user questions; make sensible assumptions and keep going.`;
+  const parts = [];
+  parts.push("## Workflow inputs\n" + bp.formFields.map(f => `- ${f.fieldName}: ${values[f.fieldName] || "(not provided)"}`).join("\n"));
+  if (reference && reference.trim()) parts.push(`## Reference material\n${reference.trim()}`);
+  outputs.slice(0, i).forEach((o, j) => {
+    if (o?.text) parts.push(`## Output of Agent ${j + 1} – ${bp.agents[j].agentName}\n${o.text}`);
+  });
+  parts.push(`## Your task\nYou are Agent ${i + 1} of ${bp.agents.length}: ${agent.agentName}. ${agent.role}\nProduce: ${agent.outputDescription}`);
+  return { system, user: parts.join("\n\n") };
+}
+
+export function buildRunMarkdown(bp, run) {
+  const out = [`# ${bp.workflowTitle}`, "", `_Run: ${new Date(run.startedAt).toLocaleString()} · Model: ${run.model}_`, "", "## Inputs"];
+  Object.entries(run.inputs || {}).forEach(([k, v]) => out.push(`- **${k}:** ${v}`));
+  run.outputs.forEach((o, i) => {
+    out.push("", "---", "", `## ${i + 1}. ${bp.agents[i]?.agentName || o.agentName}`, "", o.text || (o.error ? `_Error: ${o.error}_` : "_Not run_"));
+  });
+  return out.join("\n");
+}
