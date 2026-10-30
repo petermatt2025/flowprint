@@ -13,7 +13,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="logo">Flow<b>Print</b></span>
-      <span class="tagline">Build and run multi-agent AI workflows</span>
+      <span class="tagline">AI agents, chatbots &amp; workflows – all in your browser</span>
     </div>
     <div class="top-actions">
       <button id="btnPopout" class="icon-btn" data-tip="Open in a full browser tab for more room. Tip: you can also drag the side panel's left edge to make it wider." aria-label="Pop out">⤢</button>
@@ -21,6 +21,12 @@
       <button id="btnSettings" class="icon-btn" data-tip="Settings: API keys, default models, import/export" aria-label="Settings">⚙</button>
     </div>
   </header>
+
+  <nav class="modules" id="moduleNav">
+    <button data-module="workflows" data-tip="Multi-step workflows: a chain of agents that run in order">⚡ Workflows</button>
+    <button data-module="agents" data-tip="Single AI agents with their own prompt, knowledge, memory and tools – chat with them">🤖 AI Agents</button>
+    <button data-module="chatbots" data-tip="Branded chatbots powered by an agent, with lead capture, PIN, voice and a full-page view">💬 Chatbots</button>
+  </nav>
 
   <nav class="steps" id="stepTabs" role="tablist">
     <button role="tab" data-step="setup" data-tip="Pick your AI provider and model">1 Setup</button>
@@ -237,6 +243,12 @@
       </div>
     </section>
 
+    <!-- AI AGENTS MODULE -->
+    <section class="step" data-step="m-agents"><div id="agentsRoot"></div></section>
+
+    <!-- CHATBOTS MODULE -->
+    <section class="step" data-step="m-bots"><div id="botsRoot"></div></section>
+
     <!-- LIBRARY -->
     <section class="step" data-step="library">
       <div class="step-head">
@@ -266,6 +278,7 @@
       </div>
       <div class="card">
         <h3>Import / export <i class="tip" data-tip="Move your setup to another computer: Export here, then Import the file in FlowPrint on the other machine.">?</i></h3>
+        <label class="check"><input type="checkbox" id="exportData" checked /> Include my workflows, agents &amp; chatbots <i class="tip" data-tip="Everything you built, so another computer gets the same setup.">?</i></label>
         <label class="check"><input type="checkbox" id="exportKeys" /> Include API keys in export <i class="tip" data-tip="Only tick this if you'll keep the file private. Anyone with the file can use your keys.">?</i></label>
         <div class="btn-stack">
           <button id="btnExportSettings" class="btn ghost block">Export settings (.json)</button>

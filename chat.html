@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat</title>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="module" src="js/chatpage.js"></script>
+</head>
+<body class="chat-page">
+  <header class="chat-page-head">
+    <span id="botAvatar" class="bot-avatar"></span>
+    <div><div id="botName" class="logo"></div><div id="botDesc" class="tagline"></div></div>
+    <button id="btnNewConvo" class="btn ghost small" data-tip="Start a new conversation">+ New</button>
+  </header>
+  <main id="chatRoot" class="chat-page-main"></main>
+  <div id="tooltip" role="tooltip"></div>
+  <div id="toast"></div>
+</body>
+</html>

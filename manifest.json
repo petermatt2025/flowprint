@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "FlowPrint – MindPal Workflow Blueprint Builder",
+  "name": "FlowPrint – AI Agents, Chatbots & Workflows",
   "short_name": "FlowPrint",
-  "version": "0.2.0",
-  "description": "Turn a plain-language task into a complete MindPal multi-agent workflow blueprint. BYOK: Anthropic, OpenAI, Gemini, OpenRouter.",
+  "version": "0.3.0",
+  "description": "Build and run AI agents, chatbots and multi-agent workflows in your side panel. BYOK: Anthropic, OpenAI, Gemini, OpenRouter.",
   "action": {
     "default_title": "Open FlowPrint",
     "default_icon": {
@@ -25,7 +25,8 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
-  "permissions": ["sidePanel", "storage", "unlimitedStorage"],
+  "permissions": ["sidePanel", "storage", "unlimitedStorage", "scripting"],
+  "optional_host_permissions": ["<all_urls>"],
   "host_permissions": [
     "https://api.anthropic.com/*",
     "https://api.openai.com/*",

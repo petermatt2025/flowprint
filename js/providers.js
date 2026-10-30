@@ -76,12 +76,34 @@ export async function testKey(provider, key) {
 }
 
 // ---------- Chat completion returning text ----------
-export async function complete({ provider, key, model, system, user, maxTokens = 8000, json = true, signal }) {
+// Single-turn helper used by the workflow builder.
+export function complete({ provider, key, model, system, user, maxTokens = 8000, json = true, signal }) {
+  return chat({ provider, key, model, system, messages: [{ role: "user", content: user }], maxTokens, json, signal });
+}
+
+// Multi-turn chat. messages: [{ role: "user" | "assistant", content }]. temperature is optional;
+// some models reject it, in which case the call is retried without it.
+export async function chat(opts) {
+  try {
+    return await chatOnce(opts);
+  } catch (e) {
+    if (opts.temperature != null && e.name !== "AbortError" && /temperature/i.test(e.message)) {
+      return chatOnce({ ...opts, temperature: null });
+    }
+    throw e;
+  }
+}
+
+async function chatOnce({ provider, key, model, system, messages, maxTokens = 8000, json = false, temperature = null, signal }) {
+  if (!key) throw new Error(`No API key for ${PROVIDERS[provider]?.label || provider}. Add one in Settings.`);
+  if (!model) throw new Error("No model selected. Pick one in Setup or in the agent's Language model tab.");
+  const msgs = messages.filter(m => m.content && (m.role === "user" || m.role === "assistant"));
+  const temp = temperature != null ? { temperature } : {};
   switch (provider) {
     case "anthropic": {
       const d = await http("https://api.anthropic.com/v1/messages", {
         method: "POST", signal, headers: anthropicHeaders(key),
-        body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: "user", content: user }] })
+        body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: msgs.map(m => ({ role: m.role, content: m.content })), ...temp })
       });
       if (d.stop_reason === "max_tokens") console.warn("Output hit max_tokens");
       return d.content.filter(c => c.type === "text").map(c => c.text).join("");
@@ -93,7 +115,8 @@ export async function complete({ provider, key, model, system, user, maxTokens =
       if (provider === "openrouter") { headers["HTTP-Referer"] = "https://flowprint.app"; headers["X-Title"] = "FlowPrint"; }
       const body = {
         model,
-        messages: [{ role: "system", content: system }, { role: "user", content: user }]
+        messages: [{ role: "system", content: system }, ...msgs.map(m => ({ role: m.role, content: m.content }))],
+        ...temp
       };
       if (provider === "openai") body.max_completion_tokens = maxTokens; else body.max_tokens = maxTokens;
       if (json) body.response_format = { type: "json_object" };
@@ -115,8 +138,8 @@ export async function complete({ provider, key, model, system, user, maxTokens =
         method: "POST", signal, headers: { "content-type": "application/json" },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
-          contents: [{ role: "user", parts: [{ text: user }] }],
-          generationConfig: { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: "application/json" } : {}) }
+          contents: msgs.map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+          generationConfig: { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: "application/json" } : {}), ...temp }
         })
       });
       return (d.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");

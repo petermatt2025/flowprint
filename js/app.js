@@ -8,6 +8,9 @@ import {
 } from "./engine.js";
 import { exportPdf, exportTxt, exportJson, downloadBlob } from "./exporter.js";
 import { local, loadSettings, saveSettings, loadKeys, saveKeys } from "./storage.js";
+import { initAgents, renderAgents, openAgent, createAgent } from "./agents.js";
+import { initChatbots, renderChatbots } from "./chatbots.js";
+import { agentsStore, botsStore } from "./store.js";
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -15,6 +18,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 
 const STEPS = ["setup", "task", "agents", "run", "knowledge", "publish", "export"];
 const OVERLAYS = ["settings", "library"];
+const MODULE_VIEWS = { "m-agents": "agents", "m-bots": "chatbots" };
 const LOADING_MSGS = ["Mapping your agent chain…", "Writing agent prompts…", "Building your form field list…", "Preparing your knowledge checklist…", "Finalizing your blueprint…"];
 
 const state = {
@@ -64,6 +68,7 @@ function initTooltips() {
   let target = null;
   document.addEventListener("mouseover", e => {
     const el = e.target.closest("[data-tip]");
+    if (target && !target.isConnected) { tip.classList.remove("show"); target = null; } // element was re-rendered away
     if (!el || el === target || !el.dataset.tip) return;
     target = el;
     tip.textContent = el.dataset.tip;
@@ -84,13 +89,19 @@ function initTooltips() {
 
 // ---------------- Navigation ----------------
 function canEnter(step) {
-  if (step === "setup" || step === "task" || OVERLAYS.includes(step)) return true;
+  if (step === "setup" || step === "task" || OVERLAYS.includes(step) || MODULE_VIEWS[step]) return true;
   return !!state.blueprint;
 }
 function go(step) {
   if (!canEnter(step)) return;
   if (OVERLAYS.includes(step) && !OVERLAYS.includes(state.step)) state.prevStep = state.step;
   state.step = step;
+  if (STEPS.includes(step)) state.lastWfStep = step;
+  if (step !== "settings") state.module = MODULE_VIEWS[step] || "workflows";
+  $$("#moduleNav button").forEach(b => b.classList.toggle("active", b.dataset.module === state.module));
+  $("#stepTabs").classList.toggle("hidden", state.module !== "workflows" || step === "settings");
+  if (step === "m-agents") renderAgents();
+  if (step === "m-bots") renderChatbots();
   $$(".step").forEach(s => s.classList.toggle("active", s.dataset.step === step));
   const idx = STEPS.indexOf(step);
   $$("#stepTabs button").forEach(b => {
@@ -310,6 +321,7 @@ function renderBlueprint() {
       <div class="agent-actions">
         <button class="btn primary small" data-copy-agent="${i}">Copy prompt</button>
         <button class="btn ghost small" data-improve-agent="${i}" data-tip="Ask the AI to make this prompt more specific and structured">✨ Improve with AI</button>
+        <button class="btn ghost small" data-save-agent="${i}" data-tip="Save this step as a reusable AI Agent you can chat with or use as a chatbot brain">🤖 Save as agent</button>
       </div>
     </div>`).join("");
 
@@ -563,11 +575,17 @@ function renderSettings() {
 function applyTheme() { document.documentElement.dataset.theme = state.settings.theme; }
 
 let fileMode = "settings";
-function exportSettings() {
-  const data = { type: "flowprint-settings", version: 1, exportedAt: new Date().toISOString(), settings: state.settings };
+async function exportSettings() {
+  const data = { type: "flowprint-settings", version: 2, exportedAt: new Date().toISOString(), settings: state.settings };
   if ($("#exportKeys").checked) data.keys = state.keys;
+  if ($("#exportData").checked) {
+    data.library = await loadLibrary();
+    data.agents = await agentsStore.all();
+    data.chatbots = await botsStore.all();
+  }
   downloadBlob(JSON.stringify(data, null, 2), "flowprint-settings.json", "application/json");
-  $("#settingsStatus").textContent = data.keys ? "Exported (includes API keys – keep this file private)." : "Exported (no API keys).";
+  const what = [data.library && `${data.library.length} workflows, ${data.agents.length} agents, ${data.chatbots.length} chatbots`, data.keys ? "API keys – keep this file private" : "no API keys"].filter(Boolean).join("; ");
+  $("#settingsStatus").textContent = `Exported (${what}).`;
   $("#settingsStatus").className = "status ok";
 }
 async function onFile(e) {
@@ -583,7 +601,16 @@ async function onFile(e) {
       if (data.keys) { state.keys = { ...state.keys, ...data.keys }; await saveKeys(state.keys, state.settings.rememberKeys); }
       await saveSettings(state.settings);
       applyTheme(); renderSettings(); renderProviders(); updateTaskUI();
-      st.textContent = `✓ Settings imported${data.keys ? " with API keys" : ""}.`;
+      // Merge saved items by id (imported copies win).
+      const merge = async (key, items) => {
+        if (!Array.isArray(items)) return 0;
+        const cur = (await local.get(key)) || [];
+        const ids = new Set(items.map(x => x.id));
+        await local.set(key, [...items, ...cur.filter(x => !ids.has(x.id))]);
+        return items.length;
+      };
+      const counts = [await merge("library", data.library), await merge("agents", data.agents), await merge("chatbots", data.chatbots)];
+      st.textContent = `✓ Settings imported${data.keys ? " with API keys" : ""}${counts.some(Boolean) ? ` + ${counts[0]} workflows, ${counts[1]} agents, ${counts[2]} chatbots` : ""}.`;
     } else {
       const bp = parseBlueprint(JSON.stringify(data));
       if (bp.error || !bp.agents.length) throw new Error("Not a FlowPrint blueprint");
@@ -610,6 +637,14 @@ function wire() {
   $("#btnBack").onclick = () => go(STEPS[Math.max(0, STEPS.indexOf(state.step) - 1)]);
   $("#btnNext").onclick = () => { const n = STEPS[STEPS.indexOf(state.step) + 1]; if (n) go(n); };
   $("#btnSettings").onclick = () => { renderSettings(); go("settings"); };
+  $("#moduleNav").addEventListener("click", e => {
+    const b = e.target.closest("[data-module]");
+    if (!b) return;
+    const m = b.dataset.module;
+    if (m === "agents") go("m-agents");
+    else if (m === "chatbots") go("m-bots");
+    else go(state.lastWfStep && canEnter(state.lastWfStep) ? state.lastWfStep : (state.blueprint ? "agents" : "task"));
+  });
   $("#btnCloseSettings").onclick = () => go(state.prevStep);
   $("#btnPopout").onclick = () => {
     const ext = typeof chrome !== "undefined" && chrome.runtime?.getURL;
@@ -665,6 +700,12 @@ function wire() {
     if (c) return copy(state.blueprint.agents[+c.dataset.copyAgent].systemPrompt, "Prompt copied");
     const imp = e.target.closest("[data-improve-agent]");
     if (imp) improveAgent(+imp.dataset.improveAgent, imp);
+    const sa = e.target.closest("[data-save-agent]");
+    if (sa) {
+      const a = state.blueprint.agents[+sa.dataset.saveAgent];
+      createAgent({ name: a.agentName, folder: state.blueprint.workflowTitle.toUpperCase().slice(0, 40), tags: ["workflow"], systemPrompt: a.systemPrompt })
+        .then(() => toast(`"${a.agentName}" saved to AI Agents`));
+    }
   });
   document.addEventListener("change", e => {
     if (!e.target.matches("[data-check]")) return;
@@ -763,6 +804,14 @@ async function init() {
   applyTheme();
   initTooltips();
   wire();
+  const ctx = {
+    env: () => ({ settings: state.settings, keys: state.keys }),
+    toast,
+    createAgent,
+    openAgent: async id => { await openAgent(id); go("m-agents"); }
+  };
+  initAgents(ctx);
+  initChatbots(ctx);
   renderProviders();
   renderTaskStep();
   renderBlueprint();

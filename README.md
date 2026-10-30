@@ -1,6 +1,12 @@
-# FlowPrint – multi-agent AI workflows in your browser (Chrome extension)
+# FlowPrint – AI Agents, Chatbots & Workflows (Chrome extension)
 
-A MindPal-style workflow tool in Chrome's side panel. Describe a repeatable task and AI builds the agent chain (agents, system prompts, input form). Then **run it right inside FlowPrint** with your own inputs and API key: each agent runs in order, passing its output to the next. Workflows and their run history are saved in **My workflows**. Blueprints can still be exported (PDF/TXT/JSON) to rebuild in MindPal.
+A MindPal-style AI workspace that runs entirely in Chrome's side panel with your own API keys (BYOK). Three modules:
+
+- **⚡ Workflows**: describe a repeatable task and AI builds a chain of agents. Run it with your inputs; each agent passes its output to the next. Saved in My workflows with run history.
+- **🤖 AI Agents**: single agents with tabs for System prompt (with quality rating and ✨ Enhance with AI), Knowledge & Memory (notes, text files, current web page, remembered facts), Output settings (format, length, language, creativity), Language model (each agent can use its own provider/model), Integrations (read the current tab, webhook to Zapier/Make/n8n) and Sub-agents (consult other agents before answering). Chat with saved conversations. "Build agent with AI" creates one from a description.
+- **💬 Chatbots**: branded chatbots powered by an agent "brain". 8-step builder: Choose the brain · Identity · Chat experience (starters, follow-up chips, style) · Interface (colour, bubbles) · Capture user info (lead form, leads table, CSV export) · Control access (PIN, message limit) · Voice mode (mic input, read-aloud) · Advanced (memory turns, creativity, fallback, extra instructions). Test in the panel or open as a **full-page chatbot** in its own tab.
+
+Settings → Export includes all workflows, agents and chatbots (optionally API keys) so you can move everything to another computer.
 
 ## Install (unpacked, for testing)
 1. Download/unzip this folder.
