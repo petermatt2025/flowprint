@@ -1,6 +1,7 @@
 // AI Agents module: list, builder (System prompt · Knowledge & Memory · Output · Model · Integrations · Sub-agents) and chat.
 import { $, esc, uid, debounce, field, tabBar, readBound, setPath, downloadFile, slug, pickFiles } from "./ui.js";
-import { agentsStore, newAgent } from "./store.js";
+import { agentsStore, newAgent, connectionsStore } from "./store.js";
+import { BUILTINS, TOOL_GROUPS, CATALOG, ADD_YOUR_OWN, findApp, normalizeBuiltins, matchesQuery, hasSitePermission } from "./tools.js";
 import { PROVIDERS } from "./providers.js";
 import {
   runAgent, promptQuality, enhancePrompt, generateAgent, summarizeToMemory,
@@ -13,7 +14,7 @@ const TABS = [
   ["knowledge", "Knowledge & Memory", "Documents the agent answers from, and facts it remembers"],
   ["output", "Output settings", "Format, length, language and creativity"],
   ["model", "Language model", "Provider and model this agent uses"],
-  ["integrations", "Integrations", "Read the current web page, send answers to a webhook"],
+  ["tools", "🧰 Tools", "Built-in tools and connected apps this agent can use to take action"],
   ["subagents", "Sub-agents", "Other agents this agent consults before answering"],
   ["chat", "💬 Chat", "Talk to this agent"]
 ];
@@ -21,6 +22,7 @@ const TABS = [
 let ctx, root;
 const view = { mode: "list", id: null, tab: "prompt", sessionId: null, search: "" };
 let agents = [];
+let connections = [];
 let current = null;
 let chatHandle = null;
 
@@ -37,7 +39,7 @@ export function initAgents(c) {
 }
 
 export async function renderAgents() {
-  agents = await agentsStore.all();
+  [agents, connections] = await Promise.all([agentsStore.all(), connectionsStore.all()]);
   chatHandle?.destroy(); chatHandle = null;
   if (view.mode === "edit") {
     current = agents.find(a => a.id === view.id) || null;
@@ -163,9 +165,38 @@ function tabHtml(tab) {
         <p class="help">Models come from the live list loaded in Workflows → Setup (Test key). Each agent can use a different provider – make sure that provider's key is saved in Settings.</p>
       </div>`;
     }
-    case "integrations":
+    case "tools": {
+      a.tools ||= { builtin: [], ops: [] };
+      a.tools.builtin = normalizeBuiltins(a.tools.builtin);
+      const q = view.toolSearch || "";
+      const on = new Set(a.tools.builtin);
+      const groups = TOOL_GROUPS.map(([g, label]) => [label, BUILTINS.filter(b => b.group === g && matchesQuery(b, q))]).filter(([, list]) => list.length);
+      const conns = connections.map(c => ({ c, ops: (c.operations || []).filter(op => matchesQuery({ name: `${c.name} ${op.name}`, desc: op.description, keywords: findApp(c.appId)?.keywords }, q)) })).filter(x => x.ops.length);
+      const apps = q ? [...ADD_YOUR_OWN, ...CATALOG].filter(app => matchesQuery(app, q)).slice(0, 8) : [];
+      const count = a.tools.builtin.length + a.tools.ops.length;
       return `<div class="card">
-        ${field(a, "Read the current web page", "integrations.pageContext", { type: "checkbox", tip: "Each message includes the text of the tab you're on: reply to comments, summarise posts, analyse pages." })}
+        <input id="toolSearch" type="text" placeholder="Search tools or what you want to do, e.g. “send email”" value="${esc(q)}" />
+        <p class="help">${count} tool${count === 1 ? "" : "s"} on. The agent decides when to use them; you see live status in the chat.</p>
+      </div>
+      ${groups.map(([label, list]) => `<h3 class="folder">${esc(label)}</h3>
+        <div class="toggle-grid">${list.map(b => `<label class="toggle-cell">
+          <span class="tool-ico">${b.icon}</span><span class="grow"><b>${esc(b.name)}</b><span class="sub">${esc(b.desc)}</span></span>
+          <input type="checkbox" class="switch" data-builtin="${b.id}" ${on.has(b.id) ? "checked" : ""}/></label>`).join("")}</div>`).join("")}
+      <h3 class="folder">Apps and services</h3>
+      <div class="card">
+        ${conns.map(({ c, ops }) => `<div class="conn-block">
+          <div class="conn-head"><span class="tool-ico">${esc(c.icon || "🔌")}</span><b class="grow">${esc(c.name)} <span class="muted small">${c.type === "mcp" ? "MCP" : c.type === "webhook" ? "Webhook" : "API"} · ${ops.length} tool${ops.length === 1 ? "" : "s"}</span></b>
+            <label class="check small"><input type="checkbox" class="switch" data-allops="${c.id}" ${ops.every(op => a.tools.ops.includes(`${c.id}:${op.id}`)) ? "checked" : ""}/> all</label></div>
+          ${ops.length <= 40 ? ops.map(op => `<label class="tool-row sub-row"><input type="checkbox" data-op="${c.id}:${op.id}" ${a.tools.ops.includes(`${c.id}:${op.id}`) ? "checked" : ""}/>
+            <span class="grow"><b>${esc(op.name)}</b><span class="sub">${esc((op.description || "").slice(0, 140))}</span></span></label>`).join("")
+            : `<p class="help">${ops.length} tools – search above to pick individual ones, or use “all”.</p>`}
+        </div>`).join("") || `<p class="muted small">${connections.length ? "No connected tool matches." : "No apps connected yet."}</p>`}
+        ${apps.length ? `<h3 class="folder">Add from apps</h3>${apps.map(app => `<div class="tool-row"><span class="tool-ico">${app.icon}</span><span class="grow"><b>${esc(app.name)}</b><span class="sub">${esc(app.desc)}</span></span><button class="btn ghost small" data-a="connect" data-app="${app.id}">Add</button></div>`).join("")}` : ""}
+        <button class="btn ghost small" data-a="connect" data-tip="Browse apps, add an MCP server, a webhook / API call, or an OpenAPI spec">+ Add apps and services</button>
+      </div>
+      <div class="card">
+        <h3>Automations</h3>
+        ${field(a, "Always include the current web page", "integrations.pageContext", { type: "checkbox", tip: "Each message includes the text of the tab you're on: reply to comments, summarise posts, analyse pages." })}
         <p class="help">Chrome will ask once for permission to read pages.</p>
       </div>
       <div class="card">
@@ -174,6 +205,7 @@ function tabHtml(tab) {
         <p class="help">Sends JSON: { source, agent, input, output, timestamp }. Use it to log leads in a sheet, post to Slack, etc.</p>
         <button class="btn ghost small" data-a="testhook">Send test</button>
       </div>`;
+    }
     case "subagents": {
       const others = agents.filter(x => x.id !== a.id);
       return `<div class="card">
@@ -259,6 +291,7 @@ async function onClick(e) {
   if (act === "addpage") return addPage();
   if (act === "rmfile") { current.knowledge.files.splice(+b.dataset.i, 1); await saveNow(); return renderAgents(); }
   if (act === "testhook") return testHook();
+  if (act === "connect") return ctx.openTools?.(b.dataset.app || null);
   if (act === "newchat") { const s = { id: uid(), title: "", messages: [], createdAt: Date.now() }; current.sessions.unshift(s); view.sessionId = s.id; await saveNow(); return renderAgents(); }
   if (act === "delchat") {
     if (!confirm("Delete this conversation?")) return;
@@ -269,6 +302,7 @@ async function onClick(e) {
 
 function onInput(e) {
   const el = e.target;
+  if (el.id === "toolSearch") { view.toolSearch = el.value; const pos = el.selectionStart; renderAgents().then(() => { const s = $("#toolSearch"); s.focus(); s.setSelectionRange(pos, pos); }); return; }
   if (el.id === "agentSearch") { view.search = el.value; const pos = el.selectionStart; renderAgents().then(() => { const s = $("#agentSearch"); s.focus(); s.setSelectionRange(pos, pos); }); return; }
   if (!el.dataset.bind || !current) return;
   if (el.dataset.bind === "model.model" && el.tagName === "INPUT") {
@@ -285,6 +319,27 @@ function onInput(e) {
 async function onChange(e) {
   const el = e.target;
   if (el.id === "sessionSel") { view.sessionId = el.value; return renderAgents(); }
+  if ((el.dataset.builtin || el.dataset.op || el.dataset.allops) && current) {
+    current.tools ||= { builtin: [], ops: [] };
+    if (el.dataset.builtin) {
+      const b = BUILTINS.find(x => x.id === el.dataset.builtin);
+      if (el.checked && b.needsSites && !(await hasSitePermission()) && !(await requestSitePermission())) {
+        el.checked = false; return ctx.toast("Chrome permission is needed for this tool", true);
+      }
+      const set = new Set(current.tools.builtin);
+      el.checked ? set.add(b.id) : set.delete(b.id);
+      current.tools.builtin = [...set];
+    } else {
+      const refs = el.dataset.op ? [el.dataset.op] : connections.find(c => c.id === el.dataset.allops).operations.map(op => `${el.dataset.allops}:${op.id}`);
+      if (el.checked) await requestSitePermission();
+      const set = new Set(current.tools.ops);
+      refs.forEach(r => (el.checked ? set.add(r) : set.delete(r)));
+      current.tools.ops = [...set];
+    }
+    await saveNow();
+    if (el.dataset.allops) renderAgents();
+    return;
+  }
   if (el.dataset.sub && current) {
     const set = new Set(current.subAgents);
     el.checked ? set.add(el.dataset.sub) : set.delete(el.dataset.sub);

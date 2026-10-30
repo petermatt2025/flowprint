@@ -6,6 +6,27 @@ A MindPal-style AI workspace that runs entirely in Chrome's side panel with your
 - **🤖 AI Agents**: single agents with tabs for System prompt (with quality rating and ✨ Enhance with AI), Knowledge & Memory (notes, text files, current web page, remembered facts), Output settings (format, length, language, creativity), Language model (each agent can use its own provider/model), Integrations (read the current tab, webhook to Zapier/Make/n8n) and Sub-agents (consult other agents before answering). Chat with saved conversations. "Build agent with AI" creates one from a description.
 - **💬 Chatbots**: branded chatbots powered by an agent "brain". 8-step builder: Choose the brain · Identity · Chat experience (starters, follow-up chips, style) · Interface (colour, bubbles) · Capture user info (lead form, leads table, CSV export) · Control access (PIN, message limit) · Voice mode (mic input, read-aloud) · Advanced (memory turns, creativity, fallback, extra instructions). Test in the panel or open as a **full-page chatbot** in its own tab.
 
+- **🧰 Tools** (Apps and services): **Add your own** – an MCP server by its link, a link to call (webhook or one API call), or an OpenAPI spec. **In your workspace** shows each connection's tool count, health ("Not responding", failed calls) and which agents use it. **Apps** lists 51 apps: MCP servers (Apify, GoHighLevel, Firecrawl, GitHub, Exa, Zapier, Make…), direct apps (Airtable, Resend, Telegram, Slack, Discord, Sheets) and the rest via Zapier MCP. Recent tool activity and tool settings (Tavily key, image model).
+
+### Built-in agent tools (turn on per agent in 🧰 Tools)
+| Group | Tool | What it does |
+|---|---|---|
+| Find information | Read websites | Pages, YouTube videos (with transcript), RSS feeds, current tab, screenshots |
+| | Web search | Web, news, places, social posts (Reddit/X/LinkedIn…), free stock images |
+| Make things | Image generation | Images from a prompt (OpenAI key) |
+| | Text document | Editable document, download as Word or Markdown |
+| | HTML page | Pages, mind maps, flashcards with live preview |
+| | Carousel | Instagram-style 1080×1350 slides, download PNGs |
+| | Slides | Slide deck, download .pptx |
+| Code and apps | Code sandbox | Real Python (Pyodide, offline) on files you attach with 📎 |
+| | App builder | Builds and previews a web app in a sandbox |
+| Plan, remember and ask | Task plan | Live checklist the agent ticks off |
+| | Memory | Saves facts and searches your past chats |
+| | Clarifying questions | Asks with clickable choices |
+| | Find workspace tools | Finds and runs any connected tool when needed |
+
+Tool calls show live status in the chat (working / done / couldn't complete).
+
 Settings → Export includes all workflows, agents and chatbots (optionally API keys) so you can move everything to another computer.
 
 ## Install (unpacked, for testing)

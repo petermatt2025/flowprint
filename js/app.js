@@ -10,7 +10,8 @@ import { exportPdf, exportTxt, exportJson, downloadBlob } from "./exporter.js";
 import { local, loadSettings, saveSettings, loadKeys, saveKeys } from "./storage.js";
 import { initAgents, renderAgents, openAgent, createAgent } from "./agents.js";
 import { initChatbots, renderChatbots } from "./chatbots.js";
-import { agentsStore, botsStore } from "./store.js";
+import { initTools, renderTools, openConnect } from "./toolsmod.js";
+import { agentsStore, botsStore, connectionsStore } from "./store.js";
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -18,7 +19,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 
 const STEPS = ["setup", "task", "agents", "run", "knowledge", "publish", "export"];
 const OVERLAYS = ["settings", "library"];
-const MODULE_VIEWS = { "m-agents": "agents", "m-bots": "chatbots" };
+const MODULE_VIEWS = { "m-agents": "agents", "m-bots": "chatbots", "m-tools": "tools" };
 const LOADING_MSGS = ["Mapping your agent chain…", "Writing agent prompts…", "Building your form field list…", "Preparing your knowledge checklist…", "Finalizing your blueprint…"];
 
 const state = {
@@ -102,6 +103,7 @@ function go(step) {
   $("#stepTabs").classList.toggle("hidden", state.module !== "workflows" || step === "settings");
   if (step === "m-agents") renderAgents();
   if (step === "m-bots") renderChatbots();
+  if (step === "m-tools") renderTools();
   $$(".step").forEach(s => s.classList.toggle("active", s.dataset.step === step));
   const idx = STEPS.indexOf(step);
   $$("#stepTabs button").forEach(b => {
@@ -582,6 +584,7 @@ async function exportSettings() {
     data.library = await loadLibrary();
     data.agents = await agentsStore.all();
     data.chatbots = await botsStore.all();
+    data.connections = await connectionsStore.all();
   }
   downloadBlob(JSON.stringify(data, null, 2), "flowprint-settings.json", "application/json");
   const what = [data.library && `${data.library.length} workflows, ${data.agents.length} agents, ${data.chatbots.length} chatbots`, data.keys ? "API keys – keep this file private" : "no API keys"].filter(Boolean).join("; ");
@@ -610,6 +613,7 @@ async function onFile(e) {
         return items.length;
       };
       const counts = [await merge("library", data.library), await merge("agents", data.agents), await merge("chatbots", data.chatbots)];
+      await merge("connections", data.connections);
       st.textContent = `✓ Settings imported${data.keys ? " with API keys" : ""}${counts.some(Boolean) ? ` + ${counts[0]} workflows, ${counts[1]} agents, ${counts[2]} chatbots` : ""}.`;
     } else {
       const bp = parseBlueprint(JSON.stringify(data));
@@ -643,6 +647,7 @@ function wire() {
     const m = b.dataset.module;
     if (m === "agents") go("m-agents");
     else if (m === "chatbots") go("m-bots");
+    else if (m === "tools") { openConnect(null); go("m-tools"); }
     else go(state.lastWfStep && canEnter(state.lastWfStep) ? state.lastWfStep : (state.blueprint ? "agents" : "task"));
   });
   $("#btnCloseSettings").onclick = () => go(state.prevStep);
@@ -808,8 +813,13 @@ async function init() {
     env: () => ({ settings: state.settings, keys: state.keys }),
     toast,
     createAgent,
-    openAgent: async id => { await openAgent(id); go("m-agents"); }
+    openAgent: async id => { await openAgent(id); go("m-agents"); },
+    openTools: appId => { openConnect(appId); go("m-tools"); },
+    setKey: async (k, v) => { state.keys[k] = v; await saveKeys(state.keys, state.settings.rememberKeys); },
+    saveSettings: () => saveSettings(state.settings),
+    isVisible: () => state.step === "m-tools"
   };
+  initTools(ctx);
   initAgents(ctx);
   initChatbots(ctx);
   renderProviders();

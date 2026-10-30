@@ -1,6 +1,8 @@
 // Engine for running agents and chatbots: builds the system prompt from all agent settings,
 // consults sub-agents, reads the current page, and posts to webhooks.
-import { chat, complete } from "./providers.js";
+import { chat, complete, chatWithTools } from "./providers.js";
+import { buildToolset, logToolCall } from "./tools.js";
+import { connectionsStore, agentsStore } from "./store.js";
 import { extractJson } from "./engine.js";
 
 const KNOWLEDGE_LIMIT = 120000; // characters of knowledge sent with each call
@@ -70,7 +72,7 @@ export async function sendWebhook(url, payload) {
  * opts: { extraSystem, historyTurns, temperature, signal, onStage(text) }
  */
 export async function runAgent(agent, messages, env, opts = {}) {
-  const { extraSystem = "", historyTurns = 30, signal, onStage = () => {}, depth = 0 } = opts;
+  const { extraSystem = "", historyTurns = 30, signal, onStage = () => {}, onTool = () => {}, onAttachment = () => {}, onPlan = () => {}, files = [], depth = 0 } = opts;
   const { provider, model, key } = resolveModel(agent, env.settings, env.keys);
   let system = buildAgentSystem(agent);
   const lastUser = [...messages].reverse().find(m => m.role === "user")?.content || "";
@@ -97,11 +99,45 @@ export async function runAgent(agent, messages, env, opts = {}) {
   if (extraSystem) system += `\n\n${extraSystem}`;
   onStage("Thinking…");
   const temperature = opts.temperature ?? CREATIVITY[agent.output?.creativity || ""] ?? null;
-  const text = await chat({
-    provider, key, model, system,
-    messages: messages.slice(-historyTurns * 2),
-    maxTokens: env.settings.maxTokens, json: agent.output?.format === "json", temperature, signal
-  });
+  const history = messages.slice(-historyTurns * 2);
+  const tools = buildToolset(agent, env.connections || (await connectionsStore.all()));
+  let text;
+  if (tools.length) {
+    system += `\n\n## Tools\nYou can call tools when they help (${tools.map(t => t.name).join(", ")}). Use them for anything you cannot answer reliably on your own, then answer the user using the results.`;
+    const byName = Object.fromEntries(tools.map(t => [t.name, t]));
+    const execute = async (name, args) => {
+      const t = byName[name];
+      if (!t) throw new Error(`Unknown tool "${name}"`);
+      const id = Math.random().toString(36).slice(2);
+      const label = safeLabel(t, args);
+      onTool({ id, icon: t.icon, label, status: "running" });
+      const started = Date.now();
+      try {
+        const out = await t.run(args, {
+          env, signal, agent, files, plan: onPlan,
+          saveAgent: env.saveAgent || (a => agentsStore.save(a)),
+          attach: a => onAttachment(a)
+        });
+        onTool({ id, icon: t.icon, label, status: "done" });
+        logToolCall({ ref: t.ref, tool: t.name, agent: agent.name, agentId: agent.id, ok: true, ms: Date.now() - started });
+        return out;
+      } catch (e) {
+        if (e.name === "AbortError") throw e;
+        onTool({ id, icon: t.icon, label, status: "error", detail: e.message });
+        logToolCall({ ref: t.ref, tool: t.name, agent: agent.name, agentId: agent.id, ok: false, ms: Date.now() - started, error: e.message });
+        throw e;
+      }
+    };
+    text = await chatWithTools({
+      provider, key, model, system, messages: history, tools, execute,
+      maxTokens: env.settings.maxTokens, temperature, signal
+    });
+  } else {
+    text = await chat({
+      provider, key, model, system, messages: history,
+      maxTokens: env.settings.maxTokens, json: agent.output?.format === "json", temperature, signal
+    });
+  }
 
   if (depth === 0 && agent.integrations?.webhook?.enabled && agent.integrations.webhook.url) {
     sendWebhook(agent.integrations.webhook.url, {
@@ -109,6 +145,10 @@ export async function runAgent(agent, messages, env, opts = {}) {
     }).catch(e => console.warn("Webhook failed", e));
   }
   return text;
+}
+
+function safeLabel(t, args) {
+  try { return t.label?.(args || {}) || `Using ${t.name}`; } catch { return `Using ${t.name}`; }
 }
 
 // ---------- AI helpers for the builders ----------

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "FlowPrint – AI Agents, Chatbots & Workflows",
   "short_name": "FlowPrint",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "Build and run AI agents, chatbots and multi-agent workflows in your side panel. BYOK: Anthropic, OpenAI, Gemini, OpenRouter.",
   "action": {
     "default_title": "Open FlowPrint",
@@ -31,8 +31,18 @@
     "https://api.anthropic.com/*",
     "https://api.openai.com/*",
     "https://generativelanguage.googleapis.com/*",
-    "https://openrouter.ai/*"
+    "https://openrouter.ai/*",
+    "https://html.duckduckgo.com/*",
+    "https://api.tavily.com/*",
+    "https://news.google.com/*",
+    "https://nominatim.openstreetmap.org/*",
+    "https://www.reddit.com/*",
+    "https://api.openverse.org/*"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
+  "sandbox": { "pages": ["sandbox.html"] },
   "commands": {
     "_execute_action": {
       "suggested_key": { "default": "Alt+Shift+F" },

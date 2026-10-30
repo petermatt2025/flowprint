@@ -24,6 +24,7 @@ function collection(key) {
 
 export const agentsStore = collection("agents");
 export const botsStore = collection("chatbots");
+export const connectionsStore = collection("connections");
 
 export function newAgent(over = {}) {
   return {
@@ -37,6 +38,7 @@ export function newAgent(over = {}) {
     output: { format: "markdown", length: "medium", language: "", instructions: "", creativity: "" },
     model: { provider: "", model: "" },
     integrations: { pageContext: false, webhook: { enabled: false, url: "" } },
+    tools: { builtin: ["web_search", "memory", "task_plan"], ops: [] },
     subAgents: [],
     sessions: [],
     ...over

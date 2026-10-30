@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="style.css" />
   <script src="lib/jspdf.umd.min.js"></script>
+  <script src="lib/pptxgen.bundle.js"></script>
   <script type="module" src="js/app.js"></script>
 </head>
 <body>
@@ -26,6 +27,7 @@
     <button data-module="workflows" data-tip="Multi-step workflows: a chain of agents that run in order">⚡ Workflows</button>
     <button data-module="agents" data-tip="Single AI agents with their own prompt, knowledge, memory and tools – chat with them">🤖 AI Agents</button>
     <button data-module="chatbots" data-tip="Branded chatbots powered by an agent, with lead capture, PIN, voice and a full-page view">💬 Chatbots</button>
+    <button data-module="tools" data-tip="Assets → Tools: built-in tools, connected apps, webhooks, API imports and tool activity">🧰 Tools</button>
   </nav>
 
   <nav class="steps" id="stepTabs" role="tablist">
@@ -248,6 +250,9 @@
 
     <!-- CHATBOTS MODULE -->
     <section class="step" data-step="m-bots"><div id="botsRoot"></div></section>
+
+    <!-- TOOLS MODULE -->
+    <section class="step" data-step="m-tools"><div id="toolsRoot"></div></section>
 
     <!-- LIBRARY -->
     <section class="step" data-step="library">

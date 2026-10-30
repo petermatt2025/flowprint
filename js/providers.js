@@ -147,3 +147,111 @@ async function chatOnce({ provider, key, model, system, messages, maxTokens = 80
   }
   throw new Error(`Unknown provider ${provider}`);
 }
+
+// ---------- Tool calling (function calling) ----------
+// tools: [{ name, description, schema }]. execute(name, args) -> Promise<string> (throw on failure).
+// Loops until the model stops calling tools (max 8 rounds) and returns the final text.
+const MAX_TOOL_ROUNDS = 8;
+
+export async function chatWithTools(opts) {
+  try {
+    return await toolLoop(opts);
+  } catch (e) {
+    if (opts.temperature != null && e.name !== "AbortError" && /temperature/i.test(e.message)) {
+      return toolLoop({ ...opts, temperature: null });
+    }
+    throw e;
+  }
+}
+
+async function runCall(execute, name, args) {
+  try {
+    return { ok: true, content: String(await execute(name, args ?? {})) };
+  } catch (e) {
+    if (e.name === "AbortError") throw e;
+    return { ok: false, content: `Error: ${e.message}` };
+  }
+}
+
+const hasProps = s => s && Object.keys(s.properties || {}).length > 0;
+
+async function toolLoop({ provider, key, model, system, messages, tools, execute, maxTokens = 8000, temperature = null, signal }) {
+  if (!key) throw new Error(`No API key for ${PROVIDERS[provider]?.label || provider}. Add one in Settings.`);
+  if (!model) throw new Error("No model selected.");
+  const base = messages.filter(m => m.content && (m.role === "user" || m.role === "assistant"));
+  const temp = temperature != null ? { temperature } : {};
+
+  if (provider === "anthropic") {
+    const msgs = base.map(m => ({ role: m.role, content: m.content }));
+    const defs = tools.map(t => ({ name: t.name, description: t.description, input_schema: t.schema }));
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const d = await http("https://api.anthropic.com/v1/messages", {
+        method: "POST", signal, headers: anthropicHeaders(key),
+        body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: msgs, tools: defs, ...temp })
+      });
+      const uses = d.content.filter(c => c.type === "tool_use");
+      const text = d.content.filter(c => c.type === "text").map(c => c.text).join("");
+      if (d.stop_reason !== "tool_use" || !uses.length) return text;
+      msgs.push({ role: "assistant", content: d.content });
+      const results = [];
+      for (const u of uses) {
+        const r = await runCall(execute, u.name, u.input);
+        results.push({ type: "tool_result", tool_use_id: u.id, content: r.content, ...(r.ok ? {} : { is_error: true }) });
+      }
+      msgs.push({ role: "user", content: results });
+    }
+    return "I used several tools but ran out of steps before finishing. Please ask me to continue.";
+  }
+
+  if (provider === "openai" || provider === "openrouter") {
+    const url = provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "https://openrouter.ai/api/v1/chat/completions";
+    const headers = { Authorization: `Bearer ${key}`, "content-type": "application/json" };
+    if (provider === "openrouter") { headers["HTTP-Referer"] = "https://flowprint.app"; headers["X-Title"] = "FlowPrint"; }
+    const msgs = [{ role: "system", content: system }, ...base.map(m => ({ role: m.role, content: m.content }))];
+    const defs = tools.map(t => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.schema } }));
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const body = { model, messages: msgs, tools: defs, ...temp };
+      if (provider === "openai") body.max_completion_tokens = maxTokens; else body.max_tokens = maxTokens;
+      const d = await http(url, { method: "POST", signal, headers, body: JSON.stringify(body) });
+      const msg = d.choices?.[0]?.message || {};
+      const calls = msg.tool_calls || [];
+      if (!calls.length) return msg.content || "";
+      msgs.push({ role: "assistant", content: msg.content || null, tool_calls: calls });
+      for (const c of calls) {
+        let args = {};
+        try { args = JSON.parse(c.function?.arguments || "{}"); } catch { /* model sent bad JSON */ }
+        const r = await runCall(execute, c.function?.name, args);
+        msgs.push({ role: "tool", tool_call_id: c.id, content: r.content });
+      }
+    }
+    return "I used several tools but ran out of steps before finishing. Please ask me to continue.";
+  }
+
+  if (provider === "gemini") {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+    const contents = base.map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
+    const decls = tools.map(t => ({ name: t.name, description: t.description, ...(hasProps(t.schema) ? { parameters: t.schema } : {}) }));
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const d = await http(url, {
+        method: "POST", signal, headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] }, contents,
+          tools: [{ functionDeclarations: decls }],
+          generationConfig: { maxOutputTokens: maxTokens, ...temp }
+        })
+      });
+      const parts = d.candidates?.[0]?.content?.parts || [];
+      const calls = parts.filter(p => p.functionCall);
+      if (!calls.length) return parts.map(p => p.text || "").join("");
+      contents.push({ role: "model", parts }); // keep original parts (incl. thought signatures)
+      const responses = [];
+      for (const p of calls) {
+        const r = await runCall(execute, p.functionCall.name, p.functionCall.args);
+        responses.push({ functionResponse: { name: p.functionCall.name, response: { result: r.content } } });
+      }
+      contents.push({ role: "user", parts: responses });
+    }
+    return "I used several tools but ran out of steps before finishing. Please ask me to continue.";
+  }
+  throw new Error(`Unknown provider ${provider}`);
+}
