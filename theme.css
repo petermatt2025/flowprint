@@ -1,0 +1,34 @@
+/*
+  BRAND TOKENS — the only place colors live.
+  anthonyhayes.io could not be reached from the build environment, so these are
+  placeholder values. Replace the hex codes below with the brand palette and the
+  whole extension re-skins.
+*/
+:root {
+  --brand-primary: #6C3BFF;      /* buttons, active tab, links */
+  --brand-primary-hover: #5A2BE6;
+  --brand-accent: #00C2A8;       /* success, "automated" badges */
+  --brand-warm: #FFB020;         /* warnings, "manual" badges */
+  --brand-danger: #E5484D;
+
+  --bg: #0F1020;                 /* panel background */
+  --surface: #181A2E;            /* cards */
+  --surface-2: #22253D;          /* inputs, code blocks */
+  --border: #2E3150;
+  --text: #F2F3FA;
+  --text-muted: #A3A7C2;
+  --on-primary: #FFFFFF;
+
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --radius: 10px;
+}
+
+:root[data-theme="light"] {
+  --bg: #F6F6FB;
+  --surface: #FFFFFF;
+  --surface-2: #EEEFF6;
+  --border: #DADCEA;
+  --text: #16172B;
+  --text-muted: #5D6180;
+}

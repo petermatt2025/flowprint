@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlowPrint</title>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="lib/jspdf.umd.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">Flow<b>Print</b></span>
+      <span class="tagline">Build your MindPal workflow blueprint in 60 seconds</span>
+    </div>
+    <div class="top-actions">
+      <button id="btnPopout" class="icon-btn" data-tip="Open in a full browser tab for more room. Tip: you can also drag the side panel's left edge to make it wider." aria-label="Pop out">⤢</button>
+      <button id="btnSettings" class="icon-btn" data-tip="Settings: API keys, default models, import/export" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <nav class="steps" id="stepTabs" role="tablist">
+    <button role="tab" data-step="setup" data-tip="Pick your AI provider and model">1 Setup</button>
+    <button role="tab" data-step="task" data-tip="Describe the repeatable task you want to automate">2 Task</button>
+    <button role="tab" data-step="agents" data-tip="The chain of agents and their system prompts" disabled>3 Agents</button>
+    <button role="tab" data-step="fields" data-tip="Input fields for the published MindPal form" disabled>4 Form</button>
+    <button role="tab" data-step="knowledge" data-tip="Documents to upload to MindPal's knowledge base" disabled>5 Knowledge</button>
+    <button role="tab" data-step="publish" data-tip="Test, publish and share your workflow" disabled>6 Publish</button>
+    <button role="tab" data-step="export" data-tip="Download the whole blueprint" disabled>7 Export</button>
+  </nav>
+
+  <main id="main">
+    <!-- STEP 1: SETUP -->
+    <section class="step" data-step="setup">
+      <h2>Choose your AI provider</h2>
+      <div class="card">
+        <span class="badge auto">Automated</span>
+        <label>Provider <i class="tip" data-tip="Bring your own key. Calls go straight from your browser to the provider – no FlowPrint server in between.">?</i></label>
+        <div class="pills" id="providerPills"></div>
+
+        <label for="apiKey">API key <i class="tip" data-tip="Where to get a key: Anthropic → console.anthropic.com · OpenAI → platform.openai.com/api-keys · Gemini → aistudio.google.com/apikey · OpenRouter → openrouter.ai/keys">?</i></label>
+        <div class="row">
+          <input id="apiKey" type="password" placeholder="Paste your key" autocomplete="off" spellcheck="false" />
+          <button id="btnTestKey" class="btn ghost" data-tip="Sends a tiny request to check the key and loads the provider's newest models">Test key</button>
+        </div>
+        <div id="keyStatus" class="status"></div>
+        <p class="help">Keys are kept only on this device (chrome.storage.local) and sent only to the provider you picked. Turn off "Remember keys" in Settings to keep them for this session only.</p>
+
+        <label for="model">Model <i class="tip" data-tip="The list refreshes from the provider's live model catalogue after a successful key test, so new releases appear automatically.">?</i></label>
+        <div class="row">
+          <select id="model"></select>
+          <button id="btnRefreshModels" class="icon-btn" data-tip="Refresh model list from the provider" aria-label="Refresh models">↻</button>
+        </div>
+        <input id="customModel" type="text" placeholder="…or type a custom model ID" spellcheck="false" data-tip="Overrides the dropdown. Useful for brand-new or preview models." />
+      </div>
+      <div class="card manual">
+        <span class="badge manual">Manual</span>
+        <ul>
+          <li>Create an API key with your chosen provider (links in the ? tooltip above).</li>
+          <li>Make sure the account has billing or free credits enabled.</li>
+          <li>Have a MindPal account ready at mindpal.space (Free plan works for testing).</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- STEP 2: TASK -->
+    <section class="step" data-step="task">
+      <h2>Describe your repeatable task</h2>
+      <div class="card">
+        <span class="badge auto">Automated</span>
+        <label>Start from a preset (optional) <i class="tip" data-tip="Presets are based on the most-used MindPal workflow types. Pick one, then edit the text to fit your niche.">?</i> <a href="#" id="clearPreset" class="link">Clear</a></label>
+        <div class="pills" id="presetPills"></div>
+
+        <label for="taskText">Your task</label>
+        <textarea id="taskText" rows="6" maxlength="1000" placeholder="Example: I create PLR ebooks for the pet training niche. I want to generate a full table of contents, three chapter drafts, and a short sales description in one workflow run."></textarea>
+        <div class="counter"><span id="charCount">0</span> / 1000</div>
+
+        <label>What will this workflow produce? <i class="tip" data-tip="Auto-ticked as you type. Adjust if FlowPrint guessed wrong.">?</i></label>
+        <div class="checks" id="outputTypes"></div>
+
+        <div class="grid2">
+          <div>
+            <label for="tone">Tone of voice <i class="tip" data-tip="Applied to every agent prompt and the public form copy.">?</i></label>
+            <select id="tone">
+              <option>Professional</option>
+              <option selected>Conversational</option>
+              <option>Bold and Direct</option>
+              <option>Warm and Encouraging</option>
+              <option>Neutral</option>
+            </select>
+          </div>
+          <div>
+            <label for="niche">Niche <i class="tip" data-tip="Detected from your text. Overwrite it for a more specific niche, e.g. 'puppy potty training'.">?</i></label>
+            <input id="niche" type="text" placeholder="auto-detected" />
+          </div>
+        </div>
+
+        <button id="btnGenerate" class="btn primary block" disabled>Generate Blueprint</button>
+        <div id="loading" class="loading hidden">
+          <div class="spinner"></div>
+          <div id="loadingMsg">Mapping your agent chain…</div>
+          <button id="btnCancel" class="btn ghost small">Cancel</button>
+        </div>
+        <div id="genError" class="banner error hidden"></div>
+      </div>
+      <div class="card manual">
+        <span class="badge manual">Manual</span>
+        <ul>
+          <li>Be specific about the final deliverables (e.g. "10 hooks + 1 caption", not "social content").</li>
+          <li>Mention who will run the published form (you, clients, buyers).</li>
+          <li>Note any must-follow rules: word counts, banned words, formatting.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- STEP 3: AGENTS -->
+    <section class="step" data-step="agents">
+      <div class="step-head">
+        <h2>Agent chain</h2>
+        <span id="agentCount" class="muted"></span>
+      </div>
+      <div id="warnings" class="banner warn hidden"></div>
+      <div class="card">
+        <span class="badge auto">Automated</span>
+        <h3 id="wfTitle" contenteditable="true" data-tip="Click to edit"></h3>
+        <p id="wfDesc" contenteditable="true" data-tip="Click to edit"></p>
+        <div id="wfTags" class="tags"></div>
+      </div>
+      <div id="agentList"></div>
+      <div class="card manual">
+        <span class="badge manual">Manual — in MindPal</span>
+        <ul id="agentsManual"></ul>
+      </div>
+    </section>
+
+    <!-- STEP 4: FORM FIELDS -->
+    <section class="step" data-step="fields">
+      <h2>Input form fields</h2>
+      <div class="card">
+        <span class="badge auto">Automated</span>
+        <div class="table-wrap"><table id="fieldTable">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th><th>Example</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <button id="btnCopyFields" class="btn ghost small" data-tip="Copies the field list as text so you can recreate it in MindPal">Copy field list</button>
+      </div>
+      <div class="card manual">
+        <span class="badge manual">Manual — in MindPal</span>
+        <ul id="fieldsManual"></ul>
+      </div>
+    </section>
+
+    <!-- STEP 5: KNOWLEDGE -->
+    <section class="step" data-step="knowledge">
+      <h2>Knowledge sources</h2>
+      <div class="card">
+        <span class="badge auto">Automated</span>
+        <ul id="knowledgeList" class="checklist"></ul>
+      </div>
+      <div class="card manual">
+        <span class="badge manual">Manual — gather &amp; upload</span>
+        <ul>
+          <li>Collect each document above (PDF, DOCX, URLs or notes all work).</li>
+          <li>In MindPal open <b>Assets → Knowledge</b> and create a folder for this workflow.</li>
+          <li>Upload the files, then attach the folder to each agent that needs it.</li>
+          <li>Free plan: 100 MB storage — keep files lean.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- STEP 6: PUBLISH -->
+    <section class="step" data-step="publish">
+      <h2>Test &amp; publish</h2>
+      <div class="card">
+        <span class="badge auto">Automated — form copy</span>
+        <pre id="formCopy" class="code"></pre>
+        <button id="btnCopyForm" class="btn ghost small">Copy block</button>
+      </div>
+      <div class="card manual">
+        <span class="badge manual">Manual — publishing checklist</span>
+        <ol id="publishList" class="checklist"></ol>
+      </div>
+    </section>
+
+    <!-- STEP 7: EXPORT -->
+    <section class="step" data-step="export">
+      <h2>Export your blueprint</h2>
+      <div class="card">
+        <span class="badge auto">Automated</span>
+        <div class="btn-stack">
+          <button id="btnPdf" class="btn primary block" data-tip="A formatted PDF you can keep open while building in MindPal">Export as PDF</button>
+          <button id="btnTxt" class="btn ghost block">Download plain text (.txt)</button>
+          <button id="btnJson" class="btn ghost block" data-tip="Raw blueprint data. Re-import it later from Settings → Load blueprint.">Download JSON</button>
+          <button id="btnCopyAll" class="btn ghost block">Copy everything to clipboard</button>
+          <button id="btnStartOver" class="btn danger-ghost block">Start over</button>
+        </div>
+      </div>
+      <div class="card manual">
+        <span class="badge manual">Manual</span>
+        <ul>
+          <li>Keep the PDF open beside MindPal and work through steps 3–6 in order.</li>
+          <li>After your first test run, tweak prompts in MindPal directly.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="step" data-step="settings">
+      <div class="step-head">
+        <h2>Settings</h2>
+        <button id="btnCloseSettings" class="btn ghost small">← Back</button>
+      </div>
+      <div class="card">
+        <h3>API keys</h3>
+        <div id="keyFields"></div>
+        <label class="check"><input type="checkbox" id="rememberKeys" checked /> Remember keys on this device <i class="tip" data-tip="Off = keys are wiped when Chrome closes.">?</i></label>
+      </div>
+      <div class="card">
+        <h3>Generation</h3>
+        <label for="maxTokens">Max output tokens <i class="tip" data-tip="Higher = longer prompts but more cost. 8000 suits 3–8 agents.">?</i></label>
+        <input id="maxTokens" type="number" min="1000" max="64000" step="500" value="8000" />
+        <label for="themeSel">Appearance</label>
+        <select id="themeSel"><option value="dark">Dark</option><option value="light">Light</option></select>
+      </div>
+      <div class="card">
+        <h3>Import / export <i class="tip" data-tip="Move your setup to another computer: Export here, then Import the file in FlowPrint on the other machine.">?</i></h3>
+        <label class="check"><input type="checkbox" id="exportKeys" /> Include API keys in export <i class="tip" data-tip="Only tick this if you'll keep the file private. Anyone with the file can use your keys.">?</i></label>
+        <div class="btn-stack">
+          <button id="btnExportSettings" class="btn ghost block">Export settings (.json)</button>
+          <button id="btnImportSettings" class="btn ghost block">Import settings</button>
+          <button id="btnLoadBlueprint" class="btn ghost block" data-tip="Open a blueprint JSON you exported earlier">Load blueprint (.json)</button>
+          <input id="fileInput" type="file" accept="application/json,.json" hidden />
+        </div>
+        <div id="settingsStatus" class="status"></div>
+      </div>
+      <p class="muted small">FlowPrint v<span id="ver"></span> · Not affiliated with MindPal.</p>
+    </section>
+  </main>
+
+  <footer class="navbar">
+    <button id="btnBack" class="btn ghost">← Back</button>
+    <span id="stepIndicator" class="muted"></span>
+    <button id="btnNext" class="btn primary">Next →</button>
+  </footer>
+
+  <div id="tooltip" role="tooltip"></div>
+  <div id="toast"></div>
+</body>
+</html>
