@@ -1,23 +1,21 @@
 /*
   BRAND TOKENS — the only place colors live.
-  anthonyhayes.io could not be reached from the build environment, so these are
-  placeholder values. Replace the hex codes below with the brand palette and the
-  whole extension re-skins.
+  Brand palette: dark blue, orange and black.
 */
 :root {
-  --brand-primary: #6C3BFF;      /* buttons, active tab, links */
-  --brand-primary-hover: #5A2BE6;
-  --brand-accent: #00C2A8;       /* success, "automated" badges */
-  --brand-warm: #FFB020;         /* warnings, "manual" badges */
-  --brand-danger: #E5484D;
+  --brand-primary: #F97316;      /* orange: buttons, active tab, links */
+  --brand-primary-hover: #EA580C;
+  --brand-accent: #3B82F6;       /* bright blue: "automated" badges, success */
+  --brand-warm: #FB923C;         /* light orange: "manual" badges, warnings */
+  --brand-danger: #EF4444;
 
-  --bg: #0F1020;                 /* panel background */
-  --surface: #181A2E;            /* cards */
-  --surface-2: #22253D;          /* inputs, code blocks */
-  --border: #2E3150;
-  --text: #F2F3FA;
-  --text-muted: #A3A7C2;
-  --on-primary: #FFFFFF;
+  --bg: #05070D;                 /* near-black panel background */
+  --surface: #0B1A33;            /* dark blue cards */
+  --surface-2: #10264A;          /* inputs, code blocks */
+  --border: #1E3A66;
+  --text: #F5F7FB;
+  --text-muted: #9FB0CC;
+  --on-primary: #0A0A0A;         /* black text on orange */
 
   --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -25,10 +23,11 @@
 }
 
 :root[data-theme="light"] {
-  --bg: #F6F6FB;
+  --bg: #F4F6FA;
   --surface: #FFFFFF;
-  --surface-2: #EEEFF6;
-  --border: #DADCEA;
-  --text: #16172B;
-  --text-muted: #5D6180;
+  --surface-2: #E8EEF7;
+  --border: #C9D5E8;
+  --text: #0A1428;
+  --text-muted: #4A5B78;
+  --brand-accent: #1D4ED8;
 }

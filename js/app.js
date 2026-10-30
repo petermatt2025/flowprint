@@ -60,6 +60,7 @@ function initTooltips() {
     tip.style.left = `${left}px`;
     tip.style.top = `${top}px`;
   });
+  document.addEventListener("click", () => { tip.classList.remove("show"); target = null; }, true);
   document.addEventListener("mouseout", e => {
     if (target && !target.contains(e.relatedTarget)) { tip.classList.remove("show"); target = null; }
   });

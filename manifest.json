@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "FlowPrint – MindPal Workflow Blueprint Builder",
   "short_name": "FlowPrint",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Turn a plain-language task into a complete MindPal multi-agent workflow blueprint. BYOK: Anthropic, OpenAI, Gemini, OpenRouter.",
   "action": {
     "default_title": "Open FlowPrint",
